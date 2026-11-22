@@ -6,7 +6,7 @@ const root=path.dirname(fileURLToPath(import.meta.url));
 const sources=JSON.parse(fs.readFileSync(path.join(root,'sources.json'),'utf8'));
 const PORT=Number(process.env.PORT||3000);
 const API_KEY=process.env.GEMINI_API_KEY;
-const model=process.env.GEMINI_MODEL||'gemini-2.5-flash-lite';
+const model=process.env.GEMINI_MODEL||'gemini-3.1-flash-lite';
 const emergency=/shut\s?off|disconnect|no heat|no power|no electricity|emergency|cut off|corte de luz|desconexi[oó]n|sin calefacci[oó]n|የኤሌክትሪክ መቋረጥ|ተቋረጠ/i;
 const banned=/social security number|ssn|passport number|credit card|bank account|date of birth|upload.*(document|bill)|n[uú]mero de seguro social/i;
 const reply=(res,status,obj)=>{res.writeHead(status,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','Access-Control-Allow-Origin':'null'});res.end(JSON.stringify(obj))};
@@ -26,7 +26,7 @@ const server=http.createServer(async(req,res)=>{
  const controller=new AbortController();const timeout=setTimeout(()=>controller.abort(),20000);
  try{
  const response=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,{method:'POST',signal:controller.signal,headers:{'Content-Type':'application/json','x-goog-api-key':API_KEY},body:JSON.stringify({systemInstruction:{parts:[{text:prompt}]},contents:[{role:'user',parts:[{text:`Language: ${language}\nQuestion: ${message}`}]}],generationConfig:{temperature:0.2,maxOutputTokens:1000}})});
- const payload=await response.json();if(!response.ok){console.error('Gemini API failure',response.status);return reply(res,502,{error:response.status===429?'Gemini quota reached. Wait and retry; check your free-tier limits.':response.status===401||response.status===403?'Check your Gemini API key and project access.':'Gemini is unavailable. Check model access and try again.'})}
+ const payload=await response.json();if(!response.ok){console.error('Gemini API failure',response.status,JSON.stringify({code:payload?.error?.code,status:payload?.error?.status,message:payload?.error?.message}));return reply(res,502,{error:response.status===429?'Gemini quota reached. Wait and retry; check your free-tier limits.':response.status===401||response.status===403?'Check your Gemini API key and project access.':response.status===404?'Gemini model not available. Set GEMINI_MODEL to a model your API key can access.':response.status===400?'Gemini rejected the request (400). Check Render logs for the API error.':`Gemini API error (${response.status}). Check Render logs.`})}
  const answer=(payload.candidates?.[0]?.content?.parts||[]).filter(p=>!p.thought&&typeof p.text==='string').map(p=>p.text).join('\n').trim();
  if(!answer)return reply(res,502,{error:'No answer was returned. Please retry.'});
  const ids=[...new Set([...answer.matchAll(/\[(S\d+)\]/g)].map(m=>m[1]))];
